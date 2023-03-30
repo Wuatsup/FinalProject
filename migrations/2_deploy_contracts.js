@@ -20,4 +20,4 @@ module.exports = function(deployer) {
                     fs.writeFileSync(__dirname + '/../src/server/config.json',JSON.stringify(config, null, '\t'), 'utf-8');
                 });
     });
-}
+    }
