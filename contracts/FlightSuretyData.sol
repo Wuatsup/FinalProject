@@ -40,6 +40,15 @@ contract FlightSuretyData {
      */
     constructor() public {
         contractOwner = msg.sender;
+
+        airlines[contractOwner] = Airline({
+            isInitialized: true,
+            isRegistered: false,
+            isFunded: false,
+            airline: contractOwner,
+            votes: 0,
+            multiCallerArilines: new address[](0)
+        });
     }
 
     /********************************************************************************************/

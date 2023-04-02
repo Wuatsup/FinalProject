@@ -98,7 +98,7 @@ contract FlightSuretyApp {
     constructor() public {
         contractOwner = msg.sender;
         flightSuretyData.initalizeAirline(FirstAirline);
-        flightSuretyData.registerAirline(FirstAirline);
+        //  flightSuretyData.registerAirline(FirstAirline);
     }
 
     /********************************************************************************************/
