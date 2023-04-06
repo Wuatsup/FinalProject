@@ -92,22 +92,15 @@ contract('Flight Surety Tests', async (accounts) => {
 
 
   it('(airline) cannot register an Airline using registerAirline() if it is not funded', async () => {
-   // let registered = true;
-   // try {
-    await config.flightSuretyApp.registerAirline(config.testAddresses[2], {from: config.firstAirline});
-    //console.log(`Address: ${config.testAddresses[2]}, ${accounts[2]}`);
-   // }
-   //     catch(e) {
-   //     registered = false;<<<<<<<<<<<
-   // }
-    let result = await config.flightSuretyData.isAirlineregistered(config.testAddresses[2]); 
+      await config.flightSuretyApp.registerAirline(config.testAddresses[2], {from: config.firstAirline});
+      let result = await config.flightSuretyData.isAirlineregistered(config.testAddresses[2]); 
     assert.equal(false, result, "Airline should not be able to register another airline if it hasn't provided funding");
 
   });
 
   it('(airline) can be funded', async () => {
     let newAirline = config.testAddresses[2];
-   // await config.flightSuretyApp.fundAirline(config.firstAirline, {from: config.firstAirline, value:payment});
+    await config.flightSuretyApp.fundAirline(config.firstAirline, {from: config.firstAirline, value:payment});
     let isfunded = await config.flightSuretyData.isAirlinefunded.call(config.firstAirline); 
    assert.equal(true, isfunded, "Airline should be funded after providing 10 ether");
 
