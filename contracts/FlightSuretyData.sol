@@ -27,6 +27,7 @@ contract FlightSuretyData {
     event Voted(address newAirline, address newVoter);
 
     uint8 counterAirlines;
+    address private FirstAirline = 0xF014343BDFFbED8660A9d8721deC985126f189F3;
 
     mapping(address => Airline) private airlines;
 
@@ -38,18 +39,23 @@ contract FlightSuretyData {
      * @dev Constructor
      *      The deploying account becomes contractOwner
      */
-    constructor() public {
+    constructor(address _FirstAirline) public {
         contractOwner = msg.sender;
+        // initalizeAirline(_FirstAirline);
+        // registerAirline(_FirstAirline);
 
-        airlines[contractOwner] = Airline({
+        airlines[_FirstAirline] = Airline({
             isInitialized: true,
-            isRegistered: false,
-            isFunded: false,
-            airline: contractOwner,
+            isRegistered: true,
+            isFunded: true,
+            airline: _FirstAirline,
             votes: 0,
             multiCallerArilines: new address[](0)
         });
+        counterAirlines++;
     }
+
+    function tet() external {}
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
@@ -94,9 +100,14 @@ contract FlightSuretyData {
      *
      * When operational mode is disabled, all write transactions except for this one will fail
      */
-    function setOperatingStatus(bool mode) external requireContractOwner {
+    function setOperatingStatus(bool mode) public requireContractOwner {
         operational = mode;
     }
+
+    function authorizeCaller(address contractAddress)
+        external
+        requireContractOwner
+    {}
 
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
@@ -107,7 +118,7 @@ contract FlightSuretyData {
      *      Can only be called from FlightSuretyApp contract
      *
      */
-    function initalizeAirline(address newAirline) external {
+    function initalizeAirline(address newAirline) public {
         airlines[newAirline] = Airline({
             isInitialized: true,
             isRegistered: false,

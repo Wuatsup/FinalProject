@@ -97,8 +97,8 @@ contract FlightSuretyApp {
      */
     constructor() public {
         contractOwner = msg.sender;
-        flightSuretyData.initalizeAirline(FirstAirline);
-        //  flightSuretyData.registerAirline(FirstAirline);
+        //flightSuretyData.initalizeAirline(FirstAirline);
+        //flightSuretyData.registerAirline(FirstAirline);
     }
 
     /********************************************************************************************/
@@ -113,9 +113,10 @@ contract FlightSuretyApp {
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
 
-    function fundAirline(address newAirline) external payable requireAirline {
+    function fundAirline(address newAirline) public payable requireAirline {
         // Require Funding
-        require(msg.value >= FUNDING_FEE, "Funding fee is required");
+        uint256 amount = msg.value;
+        require(amount >= FUNDING_FEE, "Funding fee is required");
         flightSuretyData.fundAirline(newAirline);
     }
 
@@ -125,15 +126,14 @@ contract FlightSuretyApp {
      */
     function registerAirline(address newAirline)
         external
-        requireAirline
         returns (bool success, uint256 votes)
     {
         bool isDuplicate = false;
 
-        require(
-            flightSuretyData.isAirlinefunded(msg.sender),
-            "Airline is not funded"
-        );
+        //require(
+        //    flightSuretyData.isAirlinefunded(msg.sender),
+        //    "Airline is not funded"
+        //);
 
         require(
             !flightSuretyData.isAirlineregistered(newAirline),
@@ -173,7 +173,7 @@ contract FlightSuretyApp {
             ) {
                 flightSuretyData.registerAirline(newAirline);
                 return (
-                    success,
+                    true,
                     flightSuretyData.getNumberAirlinesVotes(newAirline)
                 );
             }
