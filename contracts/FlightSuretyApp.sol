@@ -31,6 +31,7 @@ contract FlightSuretyApp {
     FlightSuretyData flightSuretyData;
 
     uint256 public constant FUNDING_FEE = 10 ether;
+    uint256 public constant INSURANCE_FEE = 1 ether;
 
     uint8 counterAirline = 0;
 
@@ -95,8 +96,10 @@ contract FlightSuretyApp {
      * @dev Contract constructor
      *
      */
-    constructor() public {
+    constructor(address dataContract) public {
         contractOwner = msg.sender;
+        flightSuretyData = FlightSuretyData(dataContract);
+
         //flightSuretyData.initalizeAirline(FirstAirline);
         //flightSuretyData.registerAirline(FirstAirline);
     }
@@ -126,23 +129,16 @@ contract FlightSuretyApp {
      */
     function registerAirline(address newAirline)
         external
+        requireAirline
+        requireFunded
         returns (bool success, uint256 votes)
     {
         bool isDuplicate = false;
 
-        //require(
-        //    flightSuretyData.isAirlinefunded(msg.sender),
-        //    "Airline is not funded"
-        //);
-
         require(
             !flightSuretyData.isAirlineregistered(newAirline),
-            "Airlines is already registered"
+            "Airline is already registered"
         );
-
-        if (!flightSuretyData.isAirlineinitalized(newAirline)) {
-            flightSuretyData.initalizeAirline(newAirline);
-        }
 
         if (flightSuretyData.getNumberAirlinesRegistered() < 4) {
             flightSuretyData.registerAirline(newAirline);
@@ -180,11 +176,37 @@ contract FlightSuretyApp {
         }
     }
 
+    function buyInsurance(address _flight) public payable {
+        // Require Funding
+        require(
+            flightSuretyData.isFlighregistered(_flight),
+            "Airlines has not yet registered the flight"
+        );
+        uint256 amount = msg.value;
+        address insured = msg.sender;
+        require(amount <= INSURANCE_FEE, "Max 1 Ether can be insured");
+        flightSuretyData.buy(_flight, insured, amount);
+    }
+
     /**
      * @dev Register a future flight for insuring.
      *
      */
-    function registerFlight() external pure {}
+    function registerFlight(address _flight) external requireFunded {
+        flightSuretyData.addflight(_flight, msg.sender);
+    }
+
+    function creditInsurees(address _to, address _flight) external payable {
+        require(
+            flightSuretyData.isEligible(_flight, _to) == true,
+            "Credit is not Eligible"
+        );
+        uint256 _amountEligible = flightSuretyData.amountEligible(_flight, _to);
+        _amountEligible = (_amountEligible * 3) / 2;
+        flightSuretyData.setPayed(_flight, _to, _amountEligible);
+        _to.transfer(_amountEligible);
+        _amountEligible = 0;
+    }
 
     /**
      * @dev Called after oracle has updated flight status
@@ -405,6 +427,32 @@ contract FlightSuretyData {
     function isAirlinefunded(address newAirline) external view returns (bool) {}
 
     function getNumberAirlinesRegistered() external view returns (uint8) {}
+
+    function isFlighregistered(address _flight) external view returns (bool) {}
+
+    function buy(
+        address _flight,
+        address _insured,
+        uint256 _amount
+    ) external {}
+
+    function addflight(address _flight, address _airlines) {}
+
+    function isEligible(address _flight, address _insuree)
+        external
+        view
+        returns (bool)
+    {}
+
+    function amountEligible(address _flight, address _insuree)
+        returns (uint256)
+    {}
+
+    function setPayed(
+        address _flight,
+        address _insuree,
+        uint256 _amount
+    ) external {}
 
     function getNumberAirlinesVotes(address newAirline)
         external

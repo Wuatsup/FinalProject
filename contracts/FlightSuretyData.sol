@@ -21,15 +21,28 @@ contract FlightSuretyData {
         address[] multiCallerArilines;
     }
 
+    struct Flights {
+        bool isDelayed;
+        bool isRegistered;
+        address airline;
+        address[] hasInsurance;
+        mapping(address => uint256) amountpayed;
+        mapping(address => bool) isPayed;
+    }
+
     event AirlineInit(address newAirline);
     event AirlineRegit(address newAirline);
     event AirlineFundet(address newAirline);
+    event FlightRegit(address newFlight, address Airline);
+    event Insured(address newInsuree, uint256 Amount);
     event Voted(address newAirline, address newVoter);
+    event Withdraw(address Insuree, uint256 Amount, address Flight);
 
     uint8 counterAirlines;
     address private FirstAirline = 0xF014343BDFFbED8660A9d8721deC985126f189F3;
 
     mapping(address => Airline) private airlines;
+    mapping(address => Flights) private flights;
 
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
@@ -47,7 +60,7 @@ contract FlightSuretyData {
         airlines[_FirstAirline] = Airline({
             isInitialized: true,
             isRegistered: true,
-            isFunded: true,
+            isFunded: false,
             airline: _FirstAirline,
             votes: 0,
             multiCallerArilines: new address[](0)
@@ -190,12 +203,69 @@ contract FlightSuretyData {
      * @dev Buy insurance for a flight
      *
      */
-    function buy() external payable {}
+
+    function isFlightregistered(address _flight) external view returns (bool) {
+        return (flights[_flight].isRegistered);
+    }
+
+    function setPayed(
+        address _flight,
+        address _insuree,
+        uint256 _amount
+    ) external {
+        flights[_flight].isPayed[_insuree] = true;
+        emit Withdraw(_insuree, _amount, _flight);
+    }
+
+    function isEligible(address _flight, address _insuree)
+        external
+        view
+        returns (bool)
+    {
+        require(
+            flights[_flight].isRegistered == true,
+            "Flight is not registered"
+        );
+        require(
+            flights[_flight].isPayed[_insuree] != true,
+            "Flight is not registered"
+        );
+        require(
+            flights[_flight].amountpayed[_insuree] != 0,
+            "Insuree is not registered for the flight"
+        );
+        require(flights[_flight].isDelayed == true, "Flight is not delayed");
+
+        return (true);
+    }
+
+    function buy(
+        address _flight,
+        address _insured,
+        uint256 _amount
+    ) external {
+        flights[_flight].hasInsurance.push(_insured);
+        flights[_flight].amountpayed[_insured] = _amount;
+        emit Insured(_insured, _amount);
+    }
+
+    function addflight(address _flight, address _airlines) {
+        flights[_flight].airline = _airlines;
+        flights[_flight].isRegistered = true;
+        emit FlightRegit(_flight, _airlines);
+    }
+
+    function amountEligible(address _flight, address _insuree)
+        returns (uint256)
+    {
+        return (flights[_flight].amountpayed[_insuree]);
+    }
+
+    //Funktionalität der Versicherung nachschauen, z.B. hinterlegt die Airline geld für dei Versicherung?
 
     /**
      *  @dev Credits payouts to insurees
      */
-    function creditInsurees() external pure {}
 
     /**
      *  @dev Transfers eligible payout funds to insuree
@@ -212,10 +282,10 @@ contract FlightSuretyData {
 
     function getFlightKey(
         address airline,
-        string memory flight,
+        string memory _flight,
         uint256 timestamp
     ) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(airline, flight, timestamp));
+        return keccak256(abi.encodePacked(airline, _flight, timestamp));
     }
 
     /**
