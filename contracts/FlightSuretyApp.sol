@@ -88,6 +88,22 @@ contract FlightSuretyApp {
         _;
     }
 
+    event InsurancePurchaseEvent(
+        address airline,
+        string flightNumber,
+        uint timestamps,
+        address passenger,
+        uint amount
+    );
+
+    event InsurancePayoutCredit(
+        address airline,
+        string flightNumber,
+        uint256 timestamp
+    );
+
+    event WithdrawalEvent(address account, uint256 amount);
+
     /********************************************************************************************/
     /*                                       CONSTRUCTOR                                        */
     /********************************************************************************************/
@@ -108,8 +124,8 @@ contract FlightSuretyApp {
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
 
-    function isOperational() public pure returns (bool) {
-        return true; // Modify to call data contract's status
+    function isOperational() public returns (bool) {
+        return flightSuretyData.isOperational(); // Modify to call data contract's status
     }
 
     /********************************************************************************************/
@@ -123,11 +139,31 @@ contract FlightSuretyApp {
         flightSuretyData.fundAirline(newAirline);
     }
 
+    function getRegisteredAirlinesAccounts()
+        public
+        view
+        requireIsOperational
+        returns (address[] memory)
+    {
+        return flightSuretyData.getRegisteredAirlinesAccounts();
+    }
+
     /**
      * @dev Add an airline to the registration queue
      *
      */
-    function registerAirline(address newAirline)
+
+    function IsAirlineRegistered(address _newAirline) returns (bool) {
+        return (flightSuretyData.isAirlineregistered(_newAirline));
+    }
+
+    function IsAirlineFunded(address _newAirline) returns (bool) {
+        return (flightSuretyData.isAirlinefunded(_newAirline));
+    }
+
+    function registerAirline(
+        address newAirline
+    )
         external
         requireAirline
         requireFunded
@@ -176,26 +212,81 @@ contract FlightSuretyApp {
         }
     }
 
-    function buyInsurance(address _flight) public payable {
-        // Require Funding
-        require(
-            flightSuretyData.isFlighregistered(_flight),
-            "Airlines has not yet registered the flight"
-        );
-        uint256 amount = msg.value;
-        address insured = msg.sender;
-        require(amount <= INSURANCE_FEE, "Max 1 Ether can be insured");
-        flightSuretyData.buy(_flight, insured, amount);
-    }
-
     /**
      * @dev Register a future flight for insuring.
      *
      */
-    function registerFlight(address _flight) external requireFunded {
-        flightSuretyData.addflight(_flight, msg.sender);
+
+    function getFlightStatus(
+        address airline,
+        string memory flightNumber,
+        uint256 timestamps
+    ) public view returns (bool) {
+        return
+            flightSuretyData.getFlightStatus(airline, flightNumber, timestamps);
     }
 
+    function purchaseInsurance(
+        address airline,
+        string memory flightNumber,
+        uint timestamps
+    ) public payable requireIsOperational {
+        // Validate that flight exists or is registered
+        require(
+            getFlightStatus(airline, flightNumber, timestamps),
+            "Flight does not exist or is not registered"
+        );
+
+        // Send ETH to data contract
+
+        uint value = msg.value;
+        flightSuretyData.buy(
+            airline,
+            flightNumber,
+            msg.sender,
+            value,
+            timestamps
+        );
+
+        // Emit event
+        emit InsurancePurchaseEvent(
+            airline,
+            flightNumber,
+            timestamps,
+            msg.sender,
+            value
+        );
+    }
+
+    function registerFlight(
+        string flightNumber,
+        uint256 timestamp
+    ) external requireFunded {
+        flightSuretyData.addflight(msg.sender, flightNumber, timestamp);
+    }
+
+    function withdraw(uint256 amount) public payable {
+        // check whether caller is EOA (not contract account)
+        // https://ethereum.stackexchange.com/questions/113962/what-does-msg-sender-tx-origin-actually-do-why
+        /* require(
+            msg.sender == tx.origin,
+            "Passenger account is needed to make withdrawal"
+        );
+        */
+        // Check that there is enough balance to withdraw
+        require(
+            getAccountCredit(msg.sender) >= amount,
+            "Not enought balance in account"
+        );
+
+        // Send the payment
+        flightSuretyData.payToInsuree(msg.sender, amount);
+
+        // Emit event
+        emit WithdrawalEvent(msg.sender, amount);
+    }
+
+    /*
     function creditInsurees(address _to, address _flight) external payable {
         require(
             flightSuretyData.isEligible(_flight, _to) == true,
@@ -208,16 +299,38 @@ contract FlightSuretyApp {
         _amountEligible = 0;
     }
 
+*/
+    function getAccountCredit(address account) public view returns (uint256) {
+        return flightSuretyData.getAccountCredit(account);
+    }
+
     /**
      * @dev Called after oracle has updated flight status
      *
      */
     function processFlightStatus(
+        uint8 index,
         address airline,
         string memory flight,
         uint256 timestamp,
         uint8 statusCode
-    ) internal pure {}
+    ) internal {
+        bytes32 key = keccak256(
+            abi.encodePacked(index, airline, flight, timestamp)
+        );
+        oracleResponses[key].isOpen = false;
+        flightSuretyData.addFlightStatusCode(
+            airline,
+            flight,
+            timestamp,
+            statusCode
+        );
+
+        if (statusCode == 20) {
+            flightSuretyData.creditInsurees(airline, flight, timestamp);
+            emit InsurancePayoutCredit(airline, flight, timestamp);
+        }
+    }
 
     // Generate a request for oracles to fetch flight information
     function fetchFlightStatus(
@@ -237,6 +350,14 @@ contract FlightSuretyApp {
         });
 
         emit OracleRequest(index, airline, flight, timestamp);
+    }
+
+    function getFlightStatusCode(
+        address airline,
+        string memory flight,
+        uint256 timestamp
+    ) public view requireIsOperational returns (uint256) {
+        return flightSuretyData.getFlightStatusCode(airline, flight, timestamp);
     }
 
     // region ORACLE MANAGEMENT
@@ -352,7 +473,7 @@ contract FlightSuretyApp {
             emit FlightStatusInfo(airline, flight, timestamp, statusCode);
 
             // Handle flight status as appropriate
-            processFlightStatus(airline, flight, timestamp, statusCode);
+            processFlightStatus(index, airline, flight, timestamp, statusCode);
         }
     }
 
@@ -408,19 +529,15 @@ contract FlightSuretyApp {
 contract FlightSuretyData {
     function initalizeAirline(address newAirline) external {}
 
-    function isAirlineinitalized(address newAirline)
-        external
-        view
-        returns (bool)
-    {}
+    function isAirlineinitalized(
+        address newAirline
+    ) external view returns (bool) {}
 
     function registerAirline(address newAirline) external pure {}
 
-    function isAirlineregistered(address newAirline)
-        external
-        view
-        returns (bool)
-    {}
+    function isAirlineregistered(
+        address newAirline
+    ) external view returns (bool) {}
 
     function fundAirline(address newAirline) external {}
 
@@ -428,25 +545,45 @@ contract FlightSuretyData {
 
     function getNumberAirlinesRegistered() external view returns (uint8) {}
 
+    function getRegisteredAirlinesAccounts()
+        external
+        view
+        returns (address[] memory)
+    {}
+
     function isFlighregistered(address _flight) external view returns (bool) {}
 
     function buy(
+        address airline,
+        string flight,
+        address insuree,
+        uint256 amount,
+        uint256 timestamp
+    ) external payable {}
+
+    function addflight(
+        address airlineAddress,
+        string memory flight,
+        uint256 timestamp
+    ) {}
+
+    function getFlightStatus(
+        address airline,
+        string flightNumber,
+        uint256 timestamp
+    ) external view returns (bool) {}
+
+    function getAccountCredit(address account) external view returns (uint256);
+
+    function isEligible(
         address _flight,
-        address _insured,
-        uint256 _amount
-    ) external {}
+        address _insuree
+    ) external view returns (bool) {}
 
-    function addflight(address _flight, address _airlines) {}
-
-    function isEligible(address _flight, address _insuree)
-        external
-        view
-        returns (bool)
-    {}
-
-    function amountEligible(address _flight, address _insuree)
-        returns (uint256)
-    {}
+    function amountEligible(
+        address _flight,
+        address _insuree
+    ) returns (uint256) {}
 
     function setPayed(
         address _flight,
@@ -454,17 +591,37 @@ contract FlightSuretyData {
         uint256 _amount
     ) external {}
 
-    function getNumberAirlinesVotes(address newAirline)
-        external
-        view
-        returns (uint256)
-    {}
+    function creditInsurees(
+        address airline,
+        string flightNumber,
+        uint256 timestamp
+    ) external {}
+
+    function getNumberAirlinesVotes(
+        address newAirline
+    ) external view returns (uint256) {}
 
     function pushAirlineVoter(address Voter, address newAirline) external {}
 
-    function getAirlineVoters(address newAirline, uint256 counter)
-        external
-        view
-        returns (address)
-    {}
+    function getAirlineVoters(
+        address newAirline,
+        uint256 counter
+    ) external view returns (address) {}
+
+    function addFlightStatusCode(
+        address airline,
+        string newFlight,
+        uint256 timestamp,
+        uint256 statusCode
+    ) external {}
+
+    function getFlightStatusCode(
+        address airline,
+        string flight,
+        uint256 timestamp
+    ) external view returns (uint256) {}
+
+    function isOperational() public view returns (bool) {}
+
+    function payToInsuree(address account, uint256 amount) external payable {}
 }
