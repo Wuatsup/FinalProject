@@ -80,7 +80,7 @@ contract FlightSuretyData {
         airlines[_FirstAirline] = Airline({
             isInitialized: true,
             isRegistered: true,
-            isFunded: false,
+            isFunded: true,
             operational: false,
             airline: _FirstAirline,
             votes: 0,
